@@ -1,17 +1,14 @@
 // api/threads-data.js
 export default async function handler(req, res) {
-  // Set CORS headers for all responses
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Max-Age", "86400"); // Cache preflight for 24 hours
+  res.setHeader("Access-Control-Max-Age", "86400");
 
-  // Handle preflight requests
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  // Test endpoint
   if (!req.query.url) {
     return res.status(200).json({
       message: "Threads2IG API is working!",
@@ -50,9 +47,12 @@ export default async function handler(req, res) {
     }
 
     const html = await response.text();
+    console.log("HTML length:", html.length); // Debug: Log HTML length
+
+    // Use a more robust regex to handle variations in meta tags
     const extractMetaContent = (property) => {
       const regex = new RegExp(
-        `<meta\\s+property=["']${property}["']\\s+content=["']([^"']+)["']`,
+        `<meta\\s+property=["']${property}["'][^>]*content=["']([^"']+)["'][^>]*>`,
         "i"
       );
       const match = html.match(regex);
@@ -62,8 +62,20 @@ export default async function handler(req, res) {
     const ogTitle = extractMetaContent("og:title");
     const ogDescription = extractMetaContent("og:description");
     const ogImage = extractMetaContent("og:image");
+
+    console.log("Extracted meta tags:", { ogTitle, ogDescription, ogImage }); // Debug: Log extracted data
+
     const usernameMatch = ogTitle.match(/@([\w.\-]+)/);
     const username = usernameMatch ? `@${usernameMatch[1]}` : "Unknown User";
+
+    if (!ogTitle || !ogDescription) {
+      console.error("Failed to extract meta tags:", {
+        ogTitle,
+        ogDescription,
+        ogImage,
+      });
+      throw new Error("Could not extract post data from HTML");
+    }
 
     res.status(200).json({
       username,
@@ -77,6 +89,7 @@ export default async function handler(req, res) {
       error: "Failed to fetch post data",
       message: error.message,
       success: false,
+      debug: { htmlLength: html?.length || 0 },
     });
   }
 }
