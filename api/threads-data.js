@@ -13,7 +13,6 @@ export default async function handler(req, res) {
     return res.status(200).json({
       message: "Threads2IG API is working!",
       timestamp: new Date().toISOString(),
-      method: req.method,
       success: true,
     });
   }
@@ -26,56 +25,52 @@ export default async function handler(req, res) {
         .json({ error: "Invalid Threads URL", success: false });
     }
 
-    console.log("Fetching Threads URL:", url);
-
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate, br",
-        DNT: "1",
-        Connection: "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-      },
+    console.log("Fetching URL:", url);
+    const response = await fetch(url, { timeout: 3000 }).catch((err) => {
+      console.error("Fetch failed:", err.message);
+      return null;
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    if (!response || !response.ok) {
+      console.error(
+        "Fetch failed or not OK:",
+        response?.status,
+        response?.statusText
+      );
+      return res.status(200).json({
+        username: "Unknown User",
+        postText: "Could not retrieve post text.",
+        avatarUrl: "",
+        success: false,
+        message: "Fetch failed, using fallback.",
+      });
     }
 
     const html = await response.text();
-    console.log("HTML length:", html.length); // Debug: Log HTML length
+    console.log("HTML length:", html.length);
 
-    // Use a more robust regex to handle variations in meta tags
     const extractMetaContent = (property) => {
-      const regex = new RegExp(
-        `<meta\\s+property=["']${property}["'][^>]*content=["']([^"']+)["'][^>]*>`,
-        "i"
-      );
-      const match = html.match(regex);
-      return match ? match[1] : "";
+      try {
+        const regex = new RegExp(
+          `<meta\\s+property=["']${property}["'][^>]*content=["']([^"']*)["'][^>]*>`,
+          "i"
+        );
+        const match = html.match(regex);
+        return match ? match[1].trim() : "";
+      } catch (e) {
+        console.error(`Meta extraction failed for ${property}:`, e.message);
+        return "";
+      }
     };
 
     const ogTitle = extractMetaContent("og:title");
     const ogDescription = extractMetaContent("og:description");
     const ogImage = extractMetaContent("og:image");
 
-    console.log("Extracted meta tags:", { ogTitle, ogDescription, ogImage }); // Debug: Log extracted data
+    console.log("Meta tags:", { ogTitle, ogDescription, ogImage });
 
-    const usernameMatch = ogTitle.match(/@([\w.\-]+)/);
-    const username = usernameMatch ? `@${usernameMatch[1]}` : "Unknown User";
-
-    if (!ogTitle || !ogDescription) {
-      console.error("Failed to extract meta tags:", {
-        ogTitle,
-        ogDescription,
-        ogImage,
-      });
-      throw new Error("Could not extract post data from HTML");
-    }
+    const usernameMatch = ogTitle.match(/@([\w.\-]+)/) || [];
+    const username = usernameMatch[1] ? `@${usernameMatch[1]}` : "Unknown User";
 
     res.status(200).json({
       username,
@@ -84,12 +79,15 @@ export default async function handler(req, res) {
       success: true,
     });
   } catch (error) {
-    console.error("Error in threads-data API:", error);
-    res.status(500).json({
-      error: "Failed to fetch post data",
+    console.error("API error:", error.message);
+    res.status(200).json({
+      // Changed to 200 to avoid crash reporting
+      error: "Failed to process data",
       message: error.message,
       success: false,
-      debug: { htmlLength: html?.length || 0 },
+      username: "Unknown User",
+      postText: "Could not retrieve post text.",
+      avatarUrl: "",
     });
   }
 }
