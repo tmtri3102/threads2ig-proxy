@@ -47,7 +47,12 @@ export default async function handler(req, res) {
     }
 
     const html = await response.text();
-    console.log("HTML length:", html.length);
+    console.log(
+      "HTML length:",
+      html.length,
+      "First 500 chars:",
+      html.substring(0, 500)
+    );
 
     const extractMetaContent = (property) => {
       try {
@@ -67,21 +72,27 @@ export default async function handler(req, res) {
     const ogDescription = extractMetaContent("og:description");
     const ogImage = extractMetaContent("og:image");
 
-    console.log("Meta tags:", { ogTitle, ogDescription, ogImage });
+    console.log("Meta tags extracted:", { ogTitle, ogDescription, ogImage });
 
     const usernameMatch = ogTitle.match(/@([\w.\-]+)/) || [];
     const username = usernameMatch[1] ? `@${usernameMatch[1]}` : "Unknown User";
 
+    const success = !!ogTitle && !!ogDescription;
     res.status(200).json({
       username,
       postText: ogDescription || "Could not retrieve post text.",
       avatarUrl: ogImage || "",
-      success: true,
+      success,
+      debug: {
+        htmlLength: html.length,
+        foundTitle: !!ogTitle,
+        foundDescription: !!ogDescription,
+        foundImage: !!ogImage,
+      },
     });
   } catch (error) {
     console.error("API error:", error.message);
     res.status(200).json({
-      // Changed to 200 to avoid crash reporting
       error: "Failed to process data",
       message: error.message,
       success: false,
